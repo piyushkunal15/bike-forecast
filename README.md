@@ -1,52 +1,20 @@
-Transforms raw API data into user-friendly format with:
-- Formatted dates
-- Temperature conversion
-- Weather description processing
+# Bike Ride Weather Forecast App
 
-### UI Components
-- Material Design components
-- Custom CardView for weather items
-- Week indicators
-- Search functionality
-- Loading states
-- Error handling
+An Android application that provides 4-week weather forecasts optimized for cyclists, featuring bike-ride suitability scores and city search functionality.
 
-## Best Practices Used
+## Features
 
-1. **Clean Architecture**
-   - Separation of concerns
-   - Data models
-   - UI components
-   - Network layer
+- 🌤️ 4-week weather forecast with infinite scroll
+- 🔍 Global city search
+- 🚲 Bike ride suitability score
+- 📊 Visual weather indicators
+- 🌡️ Temperature and wind speed information
 
-2. **Error Handling**
-   - Network errors
-   - API response validation
-   - User feedback
+## Setup
 
-3. **Memory Management**
-   - RecyclerView implementation
-   - View recycling
-   - Proper cleanup
+1. Clone the repository
+2. Create `ApiKeys.kt` and add your OpenWeatherMap API key:
 
-4. **Code Organization**
-   - Kotlin best practices
-   - Clear naming conventions
-   - Modular structure
-
-## Future Enhancements
-
-- [ ] Save last searched city
-- [ ] Add pull-to-refresh
-- [ ] Implement weather icons
-- [ ] Add temperature graphs
-- [ ] Include more weather details
-- [ ] Add unit settings
-- [ ] Implement city favorites
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
 kotlin
 object ApiKeys {
 const val WEATHER_API_KEY = "your_api_key_here"
