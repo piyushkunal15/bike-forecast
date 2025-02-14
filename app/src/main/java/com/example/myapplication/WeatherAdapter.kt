@@ -12,8 +12,11 @@ import com.github.mikephil.charting.data.PieDataSet
 import com.github.mikephil.charting.data.PieEntry
 import kotlin.math.roundToInt
 
-class WeatherAdapter(private val weatherList: List<WeatherDay>) :
-    RecyclerView.Adapter<WeatherAdapter.WeatherViewHolder>() {
+class WeatherAdapter : RecyclerView.Adapter<WeatherAdapter.WeatherViewHolder>() {
+    private val weatherList = mutableListOf<WeatherDay>()
+    private var isLoading = false
+    private var onLoadMoreListener: (() -> Unit)? = null
+    private var hasReachedMax = false
 
     class WeatherViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val textViewDate: TextView = itemView.findViewById(R.id.textViewDate)
@@ -21,6 +24,27 @@ class WeatherAdapter(private val weatherList: List<WeatherDay>) :
         val textViewWeatherDesc: TextView = itemView.findViewById(R.id.textViewWeatherDesc)
         val textViewBikeScore: TextView = itemView.findViewById(R.id.textViewBikeScore)
         val pieChart: PieChart = itemView.findViewById(R.id.pieChart)
+        val weekIndicator: TextView = itemView.findViewById(R.id.weekIndicator)
+    }
+
+    fun setOnLoadMoreListener(listener: () -> Unit) {
+        onLoadMoreListener = listener
+    }
+
+    fun addItems(newItems: List<WeatherDay>) {
+        val startPosition = weatherList.size
+        weatherList.addAll(newItems)
+        notifyItemRangeInserted(startPosition, newItems.size)
+        isLoading = false
+    }
+
+    fun getItems(): List<WeatherDay> = weatherList.toList()
+
+    fun clearItems() {
+        weatherList.clear()
+        isLoading = false
+        hasReachedMax = false
+        notifyDataSetChanged()
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): WeatherViewHolder {
@@ -33,6 +57,10 @@ class WeatherAdapter(private val weatherList: List<WeatherDay>) :
     override fun onBindViewHolder(holder: WeatherViewHolder, position: Int) {
         val weatherDay = weatherList[position]
         
+        // Add week indicator
+        val weekNumber = (position / 7) + 1
+        holder.weekIndicator.text = "Week $weekNumber"
+
         holder.textViewDate.text = weatherDay.date
         holder.textViewTemp.text = "🌡️ ${weatherDay.temperature.roundToInt()}°C"
         holder.textViewWeatherDesc.text = "${getWeatherEmoji(weatherDay.weatherCode)} ${weatherDay.getWeatherDescription()}"
@@ -47,6 +75,12 @@ class WeatherAdapter(private val weatherList: List<WeatherDay>) :
         }
         holder.textViewBikeScore.setTextColor(bikeScoreColor)
         holder.textViewBikeScore.text = "\uD83D\uDEB2 Bike Score: $bikeScore%"
+
+        // Check if we need to load more data
+        if (position == weatherList.size - 2 && !isLoading) {
+            isLoading = true
+            onLoadMoreListener?.invoke()
+        }
     }
 
     private fun calculateBikeScore(day: WeatherDay): Int {

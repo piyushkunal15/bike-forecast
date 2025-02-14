@@ -10,7 +10,8 @@ interface WeatherApi {
         @Query("lat") latitude: Double,
         @Query("lon") longitude: Double,
         @Query("appid") apiKey: String,
-        @Query("units") units: String = "metric"
+        @Query("units") units: String = "metric",
+        @Query("cnt") count: Int = 40  // Maximum number of timestamps
     ): Call<WeatherResponse>
 
     @GET("geo/1.0/direct")
