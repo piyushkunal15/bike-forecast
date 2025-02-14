@@ -19,6 +19,7 @@ import java.util.Date
 import java.util.Locale
 import android.view.inputmethod.InputMethodManager
 import java.util.Calendar
+import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
@@ -179,41 +180,45 @@ class MainActivity : AppCompatActivity() {
                         if (isNewSearch) {
                             val cityName = "${weatherResponse.city.name}, ${weatherResponse.city.country}"
                             cityTextView.text = cityName
-                            currentDayOffset = 0 // Reset offset for new city
                         }
 
-                        // Get the first weather data point
-                        val firstDataPoint = weatherResponse.list.firstOrNull()
-                        if (firstDataPoint != null) {
-                            // Create weather data for next 7 days
-                            val dailyWeather = (0..6).map { dayOffset ->
-                                val calendar = Calendar.getInstance()
-                                calendar.add(Calendar.DAY_OF_YEAR, currentDayOffset + dayOffset)
+                        // Calculate base date for this batch
+                        val calendar = Calendar.getInstance()
+                        calendar.add(Calendar.DAY_OF_YEAR, currentDayOffset)
+
+                        // Group weather data by day and get mid-day (12:00) forecast for each day
+                        val dailyWeather = weatherResponse.list
+                            .groupBy {
+                                val date = Date(it.dt * 1000)
+                                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date)
+                            }
+                            .map { (_, forecasts) ->
+                                // Find forecast closest to 12:00 for each day
+                                forecasts.minByOrNull { forecast ->
+                                    val forecastHour = Calendar.getInstance().apply {
+                                        timeInMillis = forecast.dt * 1000
+                                    }.get(Calendar.HOUR_OF_DAY)
+                                    abs(forecastHour - 12)
+                                } ?: forecasts.first()
+                            }
+                            .take(7)
+                            .mapIndexed { index, data ->
+                                // Create a new calendar instance for each day
+                                val dayCalendar = calendar.clone() as Calendar
+                                dayCalendar.add(Calendar.DAY_OF_YEAR, index)
                                 
-                                // Use the temperature and weather from API for first day,
-                                // or estimate for future days
-                                val weatherData = if (dayOffset == 0) {
-                                    firstDataPoint
-                                } else {
-                                    // Find closest time point for this day if available
-                                    weatherResponse.list.find { data ->
-                                        val dataDate = Calendar.getInstance().apply {
-                                            timeInMillis = data.dt * 1000
-                                        }
-                                        dataDate.get(Calendar.DAY_OF_YEAR) == calendar.get(Calendar.DAY_OF_YEAR)
-                                    } ?: firstDataPoint // Fallback to first data point if no match
-                                }
-
-                                WeatherDay.fromWeatherData(weatherData, calendar.time)
+                                WeatherDay.fromWeatherData(
+                                    data,
+                                    dayCalendar.time
+                                )
                             }
 
-                            weatherAdapter.addItems(dailyWeather)
-                            currentDayOffset += 7
-                            
-                            // Update UI if we've reached the maximum
-                            if (weatherAdapter.getItems().size >= MAX_FORECAST_DAYS) {
-                                showMaxForecastReachedMessage()
-                            }
+                        weatherAdapter.addItems(dailyWeather)
+                        currentDayOffset += 7
+                        
+                        // Update UI if we've reached the maximum
+                        if (weatherAdapter.getItems().size >= MAX_FORECAST_DAYS) {
+                            showMaxForecastReachedMessage()
                         }
                     }
                 } else {

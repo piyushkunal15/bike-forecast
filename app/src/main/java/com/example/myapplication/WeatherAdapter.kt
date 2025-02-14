@@ -10,49 +10,28 @@ import com.github.mikephil.charting.charts.PieChart
 import com.github.mikephil.charting.data.PieData
 import com.github.mikephil.charting.data.PieDataSet
 import com.github.mikephil.charting.data.PieEntry
-import kotlin.math.roundToInt
 
 class WeatherAdapter : RecyclerView.Adapter<WeatherAdapter.WeatherViewHolder>() {
     private val weatherList = mutableListOf<WeatherDay>()
     private var isLoading = false
-    private var onLoadMoreListener: (() -> Unit)? = null
     private var hasReachedMax = false
+    private var onLoadMoreListener: (() -> Unit)? = null
 
     class WeatherViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val textViewDate: TextView = itemView.findViewById(R.id.textViewDate)
-        val textViewTemp: TextView = itemView.findViewById(R.id.textViewTemp)
-        val textViewWeatherDesc: TextView = itemView.findViewById(R.id.textViewWeatherDesc)
-        val textViewBikeScore: TextView = itemView.findViewById(R.id.textViewBikeScore)
-        val pieChart: PieChart = itemView.findViewById(R.id.pieChart)
         val weekIndicator: TextView = itemView.findViewById(R.id.weekIndicator)
-    }
-
-    fun setOnLoadMoreListener(listener: () -> Unit) {
-        onLoadMoreListener = listener
-    }
-
-    fun addItems(newItems: List<WeatherDay>) {
-        val startPosition = weatherList.size
-        weatherList.addAll(newItems)
-        notifyItemRangeInserted(startPosition, newItems.size)
-        isLoading = false
-    }
-
-    fun getItems(): List<WeatherDay> = weatherList.toList()
-
-    fun clearItems() {
-        weatherList.clear()
-        isLoading = false
-        hasReachedMax = false
-        notifyDataSetChanged()
+        val dateTextView: TextView = itemView.findViewById(R.id.dateTextView)
+        val temperatureTextView: TextView = itemView.findViewById(R.id.temperatureTextView)
+        val descriptionTextView: TextView = itemView.findViewById(R.id.descriptionTextView)
+        val windSpeedTextView: TextView = itemView.findViewById(R.id.windSpeedTextView)
+        val bikeScoreChart: PieChart = itemView.findViewById(R.id.bikeScoreChart)
+        val textViewBikeScore: TextView = itemView.findViewById(R.id.textViewBikeScore)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): WeatherViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_weather, parent, false)
+        val view = LayoutInflater.from(parent.context)
+            .inflate(R.layout.item_weather, parent, false)
         return WeatherViewHolder(view)
     }
-
-    override fun getItemCount(): Int = weatherList.size
 
     override fun onBindViewHolder(holder: WeatherViewHolder, position: Int) {
         val weatherDay = weatherList[position]
@@ -61,99 +40,150 @@ class WeatherAdapter : RecyclerView.Adapter<WeatherAdapter.WeatherViewHolder>() 
         val weekNumber = (position / 7) + 1
         holder.weekIndicator.text = "Week $weekNumber"
 
-        holder.textViewDate.text = weatherDay.date
-        holder.textViewTemp.text = "🌡️ ${weatherDay.temperature.roundToInt()}°C"
-        holder.textViewWeatherDesc.text = "${getWeatherEmoji(weatherDay.weatherCode)} ${weatherDay.getWeatherDescription()}"
-
-        val bikeScore = calculateBikeScore(weatherDay)
-        setupPieChart(holder.pieChart, bikeScore)
+        holder.dateTextView.text = weatherDay.date
+        holder.temperatureTextView.text = String.format("%.1f°C", weatherDay.temperature)
+        holder.descriptionTextView.text = weatherDay.description
         
-        val bikeScoreColor = when {
-            bikeScore >= 80 -> Color.parseColor("#4CAF50")
-            bikeScore >= 60 -> Color.parseColor("#FFC107")
-            else -> Color.parseColor("#F44336")
-        }
-        holder.textViewBikeScore.setTextColor(bikeScoreColor)
-        holder.textViewBikeScore.text = "\uD83D\uDEB2 Bike Score: $bikeScore%"
+        // Format wind speed with units
+        val windSpeedKmh = weatherDay.windSpeed * 3.6 // Convert m/s to km/h
+        holder.windSpeedTextView.text = String.format("%.1f km/h", windSpeedKmh)
+
+        // Calculate bike score (0-100)
+        val bikeScore = calculateBikeScore(weatherDay)
+        
+        // Update pie chart with color coding
+        setupPieChart(holder.bikeScoreChart, bikeScore)
+        
+        // Set bike score text with color
+        holder.textViewBikeScore.text = bikeScore.toString()
+        holder.textViewBikeScore.setTextColor(getBikeScoreColor(bikeScore))
 
         // Check if we need to load more data
-        if (position == weatherList.size - 2 && !isLoading) {
+        if (position == weatherList.size - 2 && !isLoading && !hasReachedMax) {
             isLoading = true
             onLoadMoreListener?.invoke()
         }
     }
 
-    private fun calculateBikeScore(day: WeatherDay): Int {
-        val tempScore = when {
-            day.temperature in 15.0..25.0 -> 50
-            day.temperature in 10.0..30.0 -> 30
-            else -> 10
+    private fun calculateBikeScore(weatherDay: WeatherDay): Int {
+        var score = 100
+
+        // Temperature penalty (ideal range: 18-23°C)
+        when {
+            weatherDay.temperature < 0 -> score -= 50
+            weatherDay.temperature < 5 -> score -= 40
+            weatherDay.temperature < 10 -> score -= 30
+            weatherDay.temperature < 15 -> score -= 20
+            weatherDay.temperature < 18 -> score -= 10
+            weatherDay.temperature > 30 -> score -= 50
+            weatherDay.temperature > 27 -> score -= 40
+            weatherDay.temperature > 25 -> score -= 30
+            weatherDay.temperature > 23 -> score -= 10
         }
-        
-        val windScore = when {
-            day.windSpeed < 5.0 -> 30
-            day.windSpeed < 10.0 -> 20
-            day.windSpeed < 15.0 -> 10
-            else -> 0
+
+        // Wind speed penalty (ideal: < 10 km/h)
+        val windSpeedKmh = weatherDay.windSpeed * 3.6
+        when {
+            windSpeedKmh > 40 -> score -= 50
+            windSpeedKmh > 30 -> score -= 40
+            windSpeedKmh > 20 -> score -= 30
+            windSpeedKmh > 15 -> score -= 20
+            windSpeedKmh > 10 -> score -= 10
         }
-        
-        val weatherScore = when (day.weatherCode) {
-            in 800..801 -> 20  // Clear or few clouds
-            in 802..804 -> 15  // Cloudy conditions
-            in 701..781 -> 10  // Atmospheric conditions (mist, fog, etc)
-            in 600..622 -> 0   // Snow
-            in 500..531 -> 5   // Rain
-            in 200..232 -> 0   // Thunderstorm
-            else -> 10
+
+        // Weather condition penalty
+        when (weatherDay.weatherCode) {
+            in 200..232 -> score -= 100  // Thunderstorm
+            in 300..321 -> score -= 50   // Drizzle
+            in 500..504 -> score -= 70   // Rain
+            in 511..511 -> score -= 100  // Freezing rain
+            in 520..531 -> score -= 80   // Shower rain
+            in 600..622 -> score -= 100  // Snow
+            in 701..701 -> score -= 30   // Mist
+            in 711..711 -> score -= 60   // Smoke
+            in 721..721 -> score -= 40   // Haze
+            in 731..731 -> score -= 70   // Dust/sand whirls
+            in 741..741 -> score -= 50   // Fog
+            in 751..762 -> score -= 80   // Sand/dust
+            in 771..771 -> score -= 90   // Squalls
+            in 781..781 -> score -= 100  // Tornado
+            800 -> score -= 0            // Clear sky
+            801 -> score -= 5            // Few clouds
+            802 -> score -= 10           // Scattered clouds
+            803 -> score -= 15           // Broken clouds
+            804 -> score -= 20           // Overcast clouds
         }
-        
-        return tempScore + windScore + weatherScore
+
+        return score.coerceIn(0, 100)
     }
 
-    private fun getWeatherEmoji(weatherCode: Int): String {
-        return when (weatherCode) {
-            800 -> "☀️"     // Clear sky
-            in 801..802 -> "⛅" // Few clouds
-            in 803..804 -> "☁️" // Cloudy
-            in 701..781 -> "🌫️" // Mist, fog, etc
-            in 600..622 -> "🌨️" // Snow
-            in 500..531 -> "🌧️" // Rain
-            in 300..321 -> "🌦️" // Drizzle
-            in 200..232 -> "⛈️" // Thunderstorm
-            else -> "🌤️"
+    private fun getBikeScoreColor(score: Int): Int {
+        return when {
+            score >= 90 -> Color.parseColor("#2E7D32")  // Dark Green - Excellent
+            score >= 80 -> Color.parseColor("#4CAF50")  // Green - Very Good
+            score >= 70 -> Color.parseColor("#8BC34A")  // Light Green - Good
+            score >= 60 -> Color.parseColor("#FDD835")  // Yellow - Moderate
+            score >= 50 -> Color.parseColor("#FFB300")  // Orange - Fair
+            score >= 40 -> Color.parseColor("#FB8C00")  // Dark Orange - Below Average
+            score >= 30 -> Color.parseColor("#F4511E")  // Light Red - Poor
+            else -> Color.parseColor("#C62828")         // Dark Red - Very Poor
         }
     }
 
     private fun setupPieChart(pieChart: PieChart, score: Int) {
-        pieChart.apply {
-            setUsePercentValues(true)
-            description.isEnabled = false
-            isDrawHoleEnabled = true
-            setHoleColor(Color.TRANSPARENT)
-            holeRadius = 85f
-            setDrawEntryLabels(false)
-            legend.isEnabled = false
-            setTouchEnabled(false)
-        }
-
         val entries = listOf(
-            PieEntry(score.toFloat(), "Score"),
-            PieEntry((100 - score).toFloat(), "Remaining")
+            PieEntry(score.toFloat()),
+            PieEntry((100 - score).toFloat())
         )
 
-        val dataSet = PieDataSet(entries, "Bike Score").apply {
-            colors = listOf(
-                when {
-                    score >= 80 -> Color.parseColor("#4CAF50")
-                    score >= 60 -> Color.parseColor("#FFC107")
-                    else -> Color.parseColor("#F44336")
-                },
-                Color.parseColor("#EEEEEE")
-            )
-            setDrawValues(false)
-        }
+        val dataSet = PieDataSet(entries, "Bike Score")
+        dataSet.colors = listOf(
+            getBikeScoreColor(score),     // Dynamic color based on score
+            Color.parseColor("#EEEEEE")   // Light gray for remaining
+        )
+        dataSet.setDrawValues(false)
 
-        pieChart.data = PieData(dataSet)
-        pieChart.invalidate()
+        val pieData = PieData(dataSet)
+        
+        with(pieChart) {
+            data = pieData
+            description.isEnabled = false
+            legend.isEnabled = false
+            setDrawEntryLabels(false)
+            isRotationEnabled = false
+            setHoleColor(Color.TRANSPARENT)
+            setTransparentCircleColor(Color.TRANSPARENT)
+            setTransparentCircleAlpha(0)
+            holeRadius = 75f
+            setTouchEnabled(false)
+            invalidate()
+        }
     }
+
+    override fun getItemCount(): Int = weatherList.size
+
+    fun setOnLoadMoreListener(listener: () -> Unit) {
+        onLoadMoreListener = listener
+    }
+
+    fun addItems(newItems: List<WeatherDay>) {
+        if (weatherList.size >= 28) { // 4 weeks * 7 days
+            hasReachedMax = true
+            return
+        }
+        val startPosition = weatherList.size
+        val itemsToAdd = newItems.take(28 - weatherList.size) // Only add up to 28 days total
+        weatherList.addAll(itemsToAdd)
+        notifyItemRangeInserted(startPosition, itemsToAdd.size)
+        isLoading = false
+    }
+
+    fun clearItems() {
+        weatherList.clear()
+        hasReachedMax = false
+        isLoading = false
+        notifyDataSetChanged()
+    }
+
+    fun getItems(): List<WeatherDay> = weatherList.toList()
 }
